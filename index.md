@@ -50,21 +50,20 @@ C19D7DAFBAFEB26C36E31D97C465E87C7A6E8A4C
 IT天空打开链接时可右键/长按后选择新标签页打开避免站内打开。腾讯微云链接可在已安装 TIM 时将保存的微云文件转发至任意联系人（建议自建群）进行高速下载。
 
 ### 游戏
-- [0hh1](game/0)
-- [2048](game/1)
-- [黑白棋](game/2)
-- [见缝插针](game/3)
-- [魔方](game/4)
-- [切积木](game/5)
-- [旋转六边形](game/6)
-- [一个都不能死](game/7)
-- [五子棋](game/8)
+- [0hh1](game/0hh1/)
+- [2048](game/2048/)
+- [见缝插针](game/chazhen/)
+- [魔方](game/mofang/)
+- [切积木](game/qiejimu/)
+- [旋转六边形](game/liubianxing/)
+- [一个都不能死](game/neonedead/)
+- [五子棋](game/wuziqi/)
 - [人生重开模拟器](//liferestart.syaro.io/view/)
-- [吃掉小猫猫](//eafoo.github.io/eatcat/)
+- [吃掉小猫猫](/eatcat/)
 
 ### 友情链接
-[Ruaaa's Home](//%63%6e%67%6f%76%2e%72%75%%6e) [MSDN](//msdn.itellyou.cn)
- [IT天空](//www.itsk.com) [实用工具箱](//www.sygjx.com)
+[Ruaaa's Home](//%63%6e%67%6f%76%2e%72%75%%6e) [MSDN](//msdn.itellyou.cn/)
+ [IT天空](//www.itsk.com/) [实用工具箱](//www.sygjx.com/)
 
 <span id="协议内容">免责声明：  
 1. 本站资源均来源于网络，所发布的资源仅作为学习、研究、交流目的之用途。使用、转载、转发请务必注明出处来源，禁止用于商业或收费盈利用途！
