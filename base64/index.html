@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Base64 转换</title>
+</head>
+
+<body>
+    <h1>Base64 转换</h1>
+    <div id="result"></div>
+    <script>
+        // 获取URL参数的函数
+        function getQueryParam(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+        
+        // Base64 编码和解码函数
+        function base64Encode(str) {
+            const encoder = new TextEncoder();
+            const encodedData = encoder.encode(str);
+            let binary = '';
+            const len = encodedData.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(encodedData[i]);
+            }
+            return btoa(binary);
+        }
+        
+        function base64Decode(encodedStr) {
+            const binary = atob(encodedStr);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            const decoder = new TextDecoder();
+            return decoder.decode(bytes);
+        }
+        
+        // 处理Base64编码和解码的函数
+        function handleBase64() {
+            const type = getQueryParam('type');
+            const content = getQueryParam('content');
+            const resultDiv = document.getElementById('result');
+            const currentUrl = window.location.origin + window.location.pathname;
+            const usage = `用法: ${currentUrl}?type=<encode|decode>&content=要转换的内容`;
+        
+            if (!(content === null || content === '')) {
+                if (type === 'encode') {
+                    // 将内容编码为 Base64
+                    const encoded = base64Encode(content);
+                    resultDiv.textContent = '编码结果: ' + encoded;
+                } else if (type === 'decode') {
+                    // 从 Base64 解码内容
+                    const decoded = base64Decode(content);
+                    resultDiv.textContent = '解码结果: ' + decoded;
+                } else {
+                    resultDiv.textContent = usage;
+                }
+            } else {
+                resultDiv.textContent = usage;
+            }
+        }
+
+        // 页面加载时调用该函数
+        window.onload = handleBase64;
+    </script>
+</body>
+
+</html>
