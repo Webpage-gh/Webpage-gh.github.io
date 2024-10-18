@@ -44,7 +44,7 @@ C19D7DAFBAFEB26C36E31D97C465E87C7A6E8A4C
 ### 实用工具
 - [迅雷PE版](//www.123pan.com/s/FkQ9-rxcjH)[^1] (手机版[点我下载](//www.123pan.com/s/FkQ9-OTcjH))
 - [HEU KMS Activator](//github.com/zbezj/HEU_KMS_Activator/releases/latest)[^1](**激活工具** 解压密码`HEU168`)
-- [FirPE](//cndown.puresys.net/cn2/FirPE/FirPE-V1.8.1.exe)(ISO格式[点我下载](//www.123pan.com/s/FkQ9-ExcjH))
+- [FirPE](https://firpe.cn/page-247)(ISO格式[点我下载](//www.123pan.com/s/FkQ9-ExcjH))
 - [万能驱动](//www.itsk.com/redirect.php?id=ed)
 - [万能联播](//app.iqiyi.com/common/WlanPlay.apk)(度盘下载,安卓5.1及以上)
 IT天空打开链接时可右键/长按后选择新标签页打开避免站内打开。腾讯微云链接可在已安装 TIM 时将保存的微云文件转发至任意联系人（建议自建群）进行高速下载。
@@ -62,7 +62,7 @@ IT天空打开链接时可右键/长按后选择新标签页打开避免站内�
 - [吃掉小猫猫](/eatcat/)
 
 ### 友情链接
-[Ruaaa's Home](//%63%6e%67%6f%76%2e%72%75%%6e) [MSDN](//msdn.itellyou.cn/)
+[MSDN](//msdn.itellyou.cn/)
  [IT天空](//www.itsk.com/) [实用工具箱](//www.sygjx.com/)
 
 <span id="协议内容">免责声明：  
