@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh_CN">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Geo URI Parser</title>
+    <title>Geo URI 解析器</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -34,23 +34,19 @@
     </style>
 </head>
 <body>
-    <h1>Geo URI Parser</h1>
+    <h1>Geo URI 解析器</h1>
     <form id="geoForm">
         <div class="form-group">
-            <label for="latitude">纬度 (必填，范围 -90 到 90):</label>
-            <input type="number" id="latitude" name="latitude" step="0.0001" required>
+            <label for="location">纬度,经度 (±90,±180)</label>
+            <input type="text" id="location" name="location" required>
         </div>
         <div class="form-group">
-            <label for="longitude">经度 (必填，范围 -180 到 180):</label>
-            <input type="number" id="longitude" name="longitude" step="0.0001" required>
-        </div>
-        <div class="form-group">
-            <label for="altitude">海拔高度 (可选，单位：米):</label>
-            <input type="number" id="altitude" name="altitude">
-        </div>
-        <div class="form-group">
-            <label for="uncertainty">位置不确定性 (可选，单位：米):</label>
-            <input type="number" id="uncertainty" name="uncertainty">
+            <label for="crs">坐标系：</label>
+            <select id="crs" name="crs">
+                <option value="GCJ02">GCJ02</option>
+                <option value="WGS84">WGS84</option>
+                <option value="BD09">BD09</option>
+            </select>
         </div>
         <button type="submit">打开 Geo URI</button>
     </form>
@@ -60,37 +56,30 @@
         const urlParams = new URLSearchParams(window.location.search);
 
         // 从URL中读取参数并填充到表单中
-        document.getElementById('latitude').value = urlParams.get('latitude') || '';
-        document.getElementById('longitude').value = urlParams.get('longitude') || '';
-        document.getElementById('altitude').value = urlParams.get('altitude') || '';
-        document.getElementById('uncertainty').value = urlParams.get('uncertainty') || '';
+        document.getElementById('location').value = urlParams.get('location') || '';
+        document.getElementById('crs').value = urlParams.get('crs') || 'GCJ02'; // 默认值为 GCJ02
 
         // 提交表单时构造Geo URI并跳转
         document.getElementById('geoForm').addEventListener('submit', function(event) {
             event.preventDefault();
 
             // 获取输入值
-            const latitude = document.getElementById('latitude').value;
-            const longitude = document.getElementById('longitude').value;
-            const altitude = document.getElementById('altitude').value;
-            const uncertainty = document.getElementById('uncertainty').value;
+            const location = document.getElementById('location').value;
+            const crs = document.getElementById('crs').value;
 
-            // 检查必填参数是否填写
-            if (!latitude || !longitude) {
-                alert('纬度和经度是必填项！');
+            // 使用正则表达式提取纬度和经度
+            const regex = /(-?\d{1,3}\.\d+),\s*(-?\d{1,3}\.\d+)/;
+            const match = location.match(regex);
+
+            if (!match) {
+                alert('请输入正确的纬度和经度格式（纬度,经度），例如：39.915,116.404');
                 return;
             }
 
+            const [_, latitude, longitude] = match;
+
             // 构造Geo URI
-            let geoUri = `geo://${latitude},${longitude}`;
-
-            if (altitude) {
-                geoUri += `,${altitude}`;
-            }
-
-            if (uncertainty) {
-                geoUri += `;u=${uncertainty}`;
-            }
+            let geoUri = `geo://${latitude},${longitude};crs=${crs}`;
 
             // 打开Geo URI
             window.location.href = geoUri;
