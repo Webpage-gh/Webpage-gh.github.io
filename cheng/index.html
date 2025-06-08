@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>电子秤计算器</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      margin-top: 20px;
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .result {
+      margin-top: 25px;
+      background: #fff;
+      padding: 15px;
+      border-radius: 6px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+    .result div {
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>电子秤计算器</h1>
+  <label for="price">单价（元/kg）</label>
+  <input type="number" id="price" step="0.01" placeholder="如 12.5" />
+
+  <label for="before">加手机前示数（kg）</label>
+  <input type="number" id="before" step="0.01" placeholder="如 2.35" />
+
+  <label for="phoneWeight">手机重量（g）</label>
+  <input type="number" id="phoneWeight" step="1" placeholder="如 183" />
+
+  <label for="after">加手机后示数（kg）</label>
+  <input type="number" id="after" step="0.01" placeholder="如 2.53" />
+
+  <button onclick="calculate()">计算</button>
+
+  <div class="result" id="output" style="display:none;"></div>
+
+  <script>
+    // 读取 cookie
+    function getCookie(name) {
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+      return match ? decodeURIComponent(match[2]) : null;
+    }
+
+    // 设置 cookie
+    function setCookie(name, value, days) {
+      const expires = new Date();
+      expires.setDate(expires.getDate() + days);
+      document.cookie = name + '=' + encodeURIComponent(value) + ';expires=' + expires.toUTCString() + ';path=/';
+    }
+
+    // 页面加载时填充手机重量
+    window.onload = () => {
+      const savedWeight = getCookie('phoneWeight');
+      if (savedWeight) {
+        document.getElementById('phoneWeight').value = savedWeight;
+      }
+    };
+
+  function calculate() {
+    const price = parseFloat(document.getElementById('price').value);
+    const before = parseFloat(document.getElementById('before').value);
+    const phoneWeight = parseFloat(document.getElementById('phoneWeight').value);
+    const after = parseFloat(document.getElementById('after').value);
+  
+    if (isNaN(price) || isNaN(before) || isNaN(phoneWeight) || isNaN(after)) {
+      alert('请填写所有字段');
+      return;
+    }
+  
+    if (phoneWeight <= 0) {
+      alert('手机重量必须大于0');
+      return;
+    }
+  
+    setCookie('phoneWeight', phoneWeight, 365);
+  
+    const delta = after - before;
+    const multiplier = delta / (phoneWeight / 1000); // g -> kg
+    const realWeight = before / multiplier;
+    const realWeightJin = realWeight * 2;
+    const realPrice = realWeight * price;
+  
+    const errorMargin = 0.03;
+    const lowerBound = 1 - errorMargin;
+    const upperBound = 1 + errorMargin;
+  
+    let multiplierStatus = '';
+    if (multiplier < lowerBound) {
+      multiplierStatus = '(偏多秤)';
+    } else if (multiplier > upperBound) {
+      multiplierStatus = '(偏少秤)';
+    } else {
+      multiplierStatus = '(正常，±3%)';
+    }
+  
+    const output = document.getElementById('output');
+    output.innerHTML = `
+      <div><strong>重量倍率：</strong> ${multiplier.toFixed(3)}x ${multiplierStatus}</div>
+      <div><strong>真实重量：</strong> ${realWeight.toFixed(3)} kg (${realWeightJin.toFixed(2)} 斤)</div>
+      <div><strong>真实价格：</strong> ${realPrice.toFixed(2)} 元</div>
+    `;
+    output.style.display = 'block';
+  }
+  </script>
+</body>
+</html>
