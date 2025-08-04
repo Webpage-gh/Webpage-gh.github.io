@@ -46,8 +46,11 @@ C19D7DAFBAFEB26C36E31D97C465E87C7A6E8A4C
 - [HEU KMS Activator](//github.com/zbezj/HEU_KMS_Activator/releases/latest)[^1](**激活工具** 解压密码`HEU168`)
 - [FirPE](https://firpe.cn/page-247)(ISO格式[点我下载](//www.123pan.com/s/FkQ9-ExcjH))
 - [万能驱动](//www.itsk.com/redirect.php?id=ed)
-- [万能联播](//app.iqiyi.com/common/WlanPlay.apk)(度盘下载,安卓5.1及以上)
-IT天空打开链接时可右键/长按后选择新标签页打开避免站内打开。腾讯微云链接可在已安装 TIM 时将保存的微云文件转发至任意联系人（建议自建群）进行高速下载。
+- [Base64转换](/base64/)，JavaScript实现
+- [秤](/cheng/)，通过手机重量判断秤的真假，同时给出真实重量和价格
+- [动漫美图](/dongman/)，调用公开API获取图片，可截图保存
+- [Geo URI 解析器](/geo/)，通过坐标打开地图，支持谷歌地图，白马地图
+- [AI View](/aiview/)，给出每秒Token数，预览AI生成文本的速度效果
 
 ### 游戏
 - [0hh1](game/0hh1/)
