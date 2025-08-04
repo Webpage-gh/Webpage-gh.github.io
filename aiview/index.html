@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Token 速度预览器</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    textarea { width: 100%; height: 100px; }
+    #output { border: 1px solid #ccc; padding: 10px; min-height: 60px; white-space: pre-wrap; background: #f9f9f9; margin-top: 10px; }
+    label { display: block; margin-top: 10px; }
+    button { margin-top: 10px; padding: 5px 10px; }
+  </style>
+</head>
+<body>
+  <h1>🧠 Token 速度预览器</h1>
+
+  <label for="input">输入内容（中英文均可）:</label>
+  <textarea id="input">从安装 Ubuntu 到编译安装 OpenSSL
+
+1. 安装 Ubuntu 系统
+从 https://ubuntu.com/download/desktop 下载 Ubuntu Desktop 到任意位置，再从 https://www.ventoy.net/cn/download.html 下载 Ventoy 制作启动盘。优点是装系统时无需反复刻录，且支持本地启动，不需要把映像放到U盘。
+浏览器搜索“品牌+U盘启动快捷键”（如“联想 U盘启动快捷键”），记住按哪个键启动U盘。然后记住映像所在分区的容量。随后重启，在开机时不同按下快捷键，选择U盘并启动
+进入 Ventoy 后，点 F4 进入本地浏览，找到映像，回车选 Normal Boot（正常启动），随后进入安装界面，选择“安装 Ubuntu”，按提示完成分区、用户设置，安装完成后重启进入系统。
+
+2. 更新系统
+打开终端，执行：
+sudo apt update
+sudo apt upgrade -y
+
+3. 安装编译依赖
+执行：
+sudo apt install build-essential zlib1g-dev -y
+
+4. 下载 OpenSSL 源码并校验
+访问 https://www.openssl.org/source/，找到最新稳定版（如 openssl-3.5.1.tar.gz），点击文件名下载，然后点击SHA256下载哈希文件。
+
+在终端执行：
+sha256sum -c openssl-*.tar.gz.sha256
+若提示FAILED，表明文件损坏或被修改，须重新下载
+tar -xzf Downloads/openssl-*.tar.gz
+cd openssl-*
+
+注意：如有多个 OpenSSL，需指定完整路径
+
+5. 配置编译选项
+执行：
+./Configure --prefix=$HOME/openssl --openssldir=$HOME/openssl
+
+注意：在某些平台上，OpenSSL 作为操作系统的一部分预先安装。在这种情况下，强烈建议不要覆盖系统版本，因为其他应用程序或库可能依赖它。为了避免破坏其他应用程序，请将您的 OpenSSL 副本安装到不在系统库的全局搜索路径。（摘自INSTALL.md）
+
+6. 编译并安装
+执行：
+make -j$(nproc)
+make install
+echo PATH=$HOME/openssl/bin:$PATH >> ~/.profile
+echo LD_LIBRARY_PATH=$HOME/openssl/lib:$LD_LIBRARY_PATH >> ~/.profile
+source ~/.profile
+
+7. 验证安装
+执行：
+openssl version -a
+输出应显示版本 3.5.1 及编译信息。如未显示，请检查，必要时使用搜索引擎或重新编译
+
+8. 清理下载和编译文件
+在终端输入：
+rm -r ~/Downloads/openssl-*
+这条命令不会清理掉已安装的openssl
+
+完成后，OpenSSL 已成功从源码编译并安装到系统中。如需卸载，可执行 rm -r ~/openssl，然后用 vim 等编辑器去除 ~/.profile 中写入的部分</textarea>
+
+  <label for="speed">每秒 token 处理速度（token/s）:</label>
+  <input type="number" id="speed" value="30" min="1">
+
+  <button onclick="startPreview()">开始预览</button>
+
+  <div id="output"></div>
+
+  <script>
+    function getTokenCount(text) {
+      let tokenCount = 0;
+      for (const char of text) {
+        if (char.match(/[\u4e00-\u9fa5]/)) {
+          tokenCount += 2; // 中文 1 字 ≈ 2 token
+        } else if (char.match(/\w+/)) {
+          tokenCount += 1; // 英文单词字符 ≈ 1 token
+        } else {
+          tokenCount += 0.5; // 标点符号等算 0.5 token
+        }
+      }
+      return tokenCount;
+    }
+
+    async function startPreview() {
+      const input = document.getElementById('input').value;
+      const speed = parseFloat(document.getElementById('speed').value); // token/s
+      const outputDiv = document.getElementById('output');
+      outputDiv.textContent = '';
+
+      let totalTokens = 0;
+      for (const c of input) {
+        totalTokens += getTokenCount(c);
+      }
+
+      let shownText = '';
+      let currentTokens = 0;
+
+      for (let i = 0; i < input.length; i++) {
+        const c = input[i];
+        const tokens = getTokenCount(c);
+        const delay = (tokens / speed) * 1000; // 毫秒
+        await new Promise(res => setTimeout(res, delay));
+        shownText += c;
+        outputDiv.textContent = shownText;
+      }
+    }
+  </script>
+</body>
+</html>
