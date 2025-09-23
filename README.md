@@ -1,4 +1,4 @@
-## [Webpage的小站](https://webpage-gh.github.io)
+## [Webpage的小站](https://webpage-cf.eu.org)
 
 🌐 一个整合实用系统资源与轻量工具的便捷站点，提供：
 
