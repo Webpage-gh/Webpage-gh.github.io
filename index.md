@@ -62,7 +62,7 @@ C19D7DAFBAFEB26C36E31D97C465E87C7A6E8A4C
 - [一个都不能死](game/noonedead/)
 - [五子棋](game/wuziqi/)
 - [人生重开模拟器](//liferestart.syaro.io/view/)
-- [吃掉小猫猫](/eatcat/)
+- [吃掉小猫猫](//eatcat.webpage-cf.eu.org)
 
 ### 友情链接
 [MSDN](//msdn.itellyou.cn/)
