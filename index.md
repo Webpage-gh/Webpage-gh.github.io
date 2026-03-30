@@ -51,6 +51,7 @@ C19D7DAFBAFEB26C36E31D97C465E87C7A6E8A4C
 - [动漫美图](/dongman/)，调用公开API获取图片，可截图保存
 - [Geo URI 解析器](/geo/)，通过坐标打开地图，支持谷歌地图，白马地图
 - [AI View](/aiview/)，给出每秒Token数，预览AI生成文本的速度效果
+- [图片对比](diff-preview/)，通过滑块对比图片差异
 
 ### 游戏
 - [0hh1](game/0hh1/)
