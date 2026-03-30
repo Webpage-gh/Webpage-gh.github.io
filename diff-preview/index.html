@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>动态高度图片对比工具</title>
+    <style>
+        :root {
+            --position: 50%;
+            --primary-color: #4a90e2;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f5f7f9;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+
+        /* 1. 控制按钮区域 */
+        .controls {
+            margin-bottom: 30px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .upload-btn {
+            padding: 10px 20px;
+            background: white;
+            border: 2px solid var(--primary-color);
+            color: var(--primary-color);
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .upload-btn:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        input[type="file"] { display: none; }
+
+        /* 2. 图片容器布局 - 核心改动点 */
+        .compare-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 1000px; /* 限制最大宽度，高度将自动按比例延伸 */
+            overflow: hidden;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+            background: #eee;
+            line-height: 0; /* 消除图片下方的微小间隙 */
+        }
+
+        /* 底层图片：决定容器的总高度 */
+        .image-after {
+            width: 100%;
+            height: auto;
+            display: block; /* 撑开容器高度 */
+        }
+
+        /* 顶层图片：绝对定位覆盖 */
+        .image-before {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            clip-path: polygon(0 0, var(--position) 0, var(--position) 100%, 0 100%);
+        }
+
+        /* 3. 装饰元素与标签 */
+        .label {
+            position: absolute;
+            top: 20px;
+            padding: 6px 12px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            font-size: 12px;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 5;
+            text-transform: uppercase;
+        }
+        .label-before { left: 20px; }
+        .label-after { right: 20px; }
+
+        /* 4. 滑块 UI */
+        .slider-line {
+            position: absolute;
+            inset: 0;
+            width: 2px;
+            height: 100%;
+            background: white;
+            left: var(--position);
+            transform: translateX(-50%);
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .slider-handle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+
+        .slider-handle::after {
+            content: "↔";
+            color: #333;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .slider-input {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: col-resize;
+            z-index: 20;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <label class="upload-btn">
+            选择 Before 图片
+            <input type="file" id="before-upload" accept="image/*">
+        </label>
+        <label class="upload-btn">
+            选择 After 图片
+            <input type="file" id="after-upload" accept="image/*">
+        </label>
+    </div>
+
+    <div class="compare-wrapper" id="viewer">
+        <div class="label label-before">Before</div>
+        <div class="label label-after">After</div>
+
+        <img src="https://via.placeholder.com/1200x600/2ecc71/ffffff?text=After+Image" id="img-after" class="image-after">
+        <img src="https://via.placeholder.com/1200x600/e74c3c/ffffff?text=Before+Image" id="img-before" class="image-before">
+
+        <div class="slider-line">
+            <div class="slider-handle"></div>
+        </div>
+
+        <input type="range" min="0" max="100" value="50" class="slider-input" id="range-slider">
+    </div>
+
+    <script>
+        const slider = document.getElementById('range-slider');
+        const viewer = document.getElementById('viewer');
+        const imgBefore = document.getElementById('img-before');
+        const imgAfter = document.getElementById('img-after');
+        const beforeUpload = document.getElementById('before-upload');
+        const afterUpload = document.getElementById('after-upload');
+
+        // 1. 同步滑动位置
+        slider.addEventListener('input', (e) => {
+            viewer.style.setProperty('--position', `${e.target.value}%`);
+        });
+
+        // 2. 处理图片上传函数
+        function handleFileSelect(input, targetImg) {
+            const file = input.files[0];
+            if (file) {
+                // 创建一个临时的本地 URL
+                const url = URL.createObjectURL(file);
+                targetImg.src = url;
+                
+                // 图片加载后释放内存
+                targetImg.onload = () => {
+                    URL.revokeObjectURL(url);
+                }
+            }
+        }
+
+        beforeUpload.addEventListener('change', () => handleFileSelect(beforeUpload, imgBefore));
+        afterUpload.addEventListener('change', () => handleFileSelect(afterUpload, imgAfter));
+    </script>
+</body>
+</html>
