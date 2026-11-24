@@ -46,12 +46,12 @@ C19D7DAFBAFEB26C36E31D97C465E87C7A6E8A4C
 - [HEU KMS Activator](//github.com/zbezj/HEU_KMS_Activator/releases/latest)[^1](**激活工具** 解压密码`HEU168`)
 - [FirPE](https://firpe.cn/page-247)(ISO格式[点我下载](//www.123pan.com/s/FkQ9-ExcjH))
 - [万能驱动](//www.itsk.com/redirect.php?id=ed)
-- [Base64转换](/base64/)，JavaScript实现
-- [秤](/cheng/)，通过手机重量判断秤的真假，同时给出真实重量和价格
-- [动漫美图](/dongman/)，调用公开API获取图片，可截图保存
-- [Geo URI 解析器](/geo/)，通过坐标打开地图，支持谷歌地图，白马地图
-- [AI View](/aiview/)，给出每秒Token数，预览AI生成文本的速度效果
-- [图片对比](diff-preview/)，通过滑块对比图片差异
+- [秤](/static/cheng/)，通过手机重量判断秤的真假，同时给出真实重量和价格
+- [动漫美图](/static/dongman/)，调用公开API获取图片，可截图保存
+- [Geo URI 解析器](/static/geo/)，通过坐标打开地图，支持谷歌地图，白马地图
+- [AI View](/static/aiview/)，给出每秒Token数，预览AI生成文本的速度效果
+- [图片对比](/static/diff-preview/)，通过滑块对比图片差异
+- [图片裁剪器](/static/imagecropper/)，无极放大，精确裁剪图片
 
 ### 游戏
 - [0hh1](game/0hh1/)

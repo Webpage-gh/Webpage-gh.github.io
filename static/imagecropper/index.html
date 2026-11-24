@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>图片裁剪器</title>
+<style>
+  :root{
+    --bg:#0b0d10; --panel:rgba(18,22,28,.88); --line:#2a323c;
+    --fg:#e8edf2; --dim:#8b97a5; --accent:#4fe3b0;
+    --solid:#12161c; --card-w:248px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    touch-action:none; overscroll-behavior:none; user-select:none;-webkit-user-select:none}
+  /* 步 5b：画布区 = 视口扣掉卡片占位。画布区左上角仍是 (0,0)，
+     所以 screen = orig*s + offset 的公式、pointer 的 clientX/Y 全部不用改：
+     canvas.clientWidth/Height 天然就是画布区尺寸。 */
+  #stage{position:fixed;inset:0;display:grid;
+    grid-template-columns:1fr;grid-template-rows:1fr auto}
+  #view{position:relative;grid-column:1;grid-row:1;
+    width:100%;height:100%;display:block;min-width:0;min-height:0;
+    image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;cursor:crosshair}
+  #panel{grid-column:1;grid-row:2;display:grid;padding:8px;min-width:0}
+  /* editor / confirmBar 叠在同一格：两者都参与布局 → panel 高度 = max(两者)，
+     切换 S2↔S3 只改 visibility，画布区尺寸不跳，图不会忽然变大变小。 */
+  /* 编辑区透明化已回退到步 6 的实心外观。
+     原因：editor 是 #panel 内的 grid item，与 canvas 并列（竖屏 row2 / 横屏 col2），
+     不与画面重叠 → 半透明只能透出 body 实色、blur(8px) 无内容可糊，
+     照搬 HUD 四件套得不到 HUD 那种观感。HUD 好看是因它 fixed 压在 canvas 之上。
+     本轮只回退这一项；--bg 实色、HUD top/自适应/选区宽高 px、按钮右上全部保留。 */
+  #editor,#confirmBar{grid-area:1/1;min-width:0}
+
+  .top{position:fixed;top:0;left:0;right:0;z-index:10;padding:calc(env(safe-area-inset-top) + 10px) 12px 0;
+    display:flex;align-items:flex-start;gap:10px;pointer-events:none}
+  .btns{display:flex;gap:8px;pointer-events:auto;flex-shrink:0;margin-left:auto}
+  button{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--fg);
+    font-size:12px;padding:8px 11px;border-radius:9px;cursor:pointer;backdrop-filter:blur(8px)}
+  button:active{background:#24303c}
+
+  #hud{position:fixed;left:12px;top:calc(env(safe-area-inset-top) + 10px);z-index:10;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 11px;
+    font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--dim);
+    pointer-events:none;backdrop-filter:blur(8px);
+    width:max-content;max-width:calc(100vw - 24px);min-width:0}
+  #hud b{color:var(--accent);font-weight:600}
+  #hud .k{color:#65717f;display:inline-block;width:auto;margin-right:8px}
+
+  #editor{padding:9px 10px calc(env(safe-area-inset-bottom) + 9px);
+    background:var(--solid);border:1px solid var(--line);border-radius:10px;
+    display:flex;flex-direction:column;gap:6px;touch-action:manipulation}
+  /* 无角点时常驻不隐藏：面板仍实心，只把控件置灰，不再半透明糊在图上 */
+  #editor.off{pointer-events:none}
+  #editor.off button,#editor.off input,#editor.off label,
+  #editor.off .hint,#editor.off .tip{opacity:.38}
+  #editor .row{display:flex;align-items:center;gap:6px}
+  #editor button{font-size:11px;padding:6px 9px;flex-shrink:0}
+  #editor button:disabled{opacity:.38;cursor:default}
+  #editor .acts{display:grid;grid-template-columns:1fr 1fr}
+  #editor .acts button{width:100%;padding:6px 3px}
+  #editor .hint{margin-left:auto;font-size:10px;color:var(--dim);text-align:right;line-height:1.3}
+  #editor label{font:11px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    color:var(--dim);width:12px;flex:none}
+  #editor input[type=text]{width:62px;flex:none;background:#0f141a;border:1px solid var(--line);
+    border-radius:6px;color:var(--fg);font:12px ui-monospace,Menlo,Consolas,monospace;
+    padding:5px 6px;outline:none;text-align:center}
+  #editor input[type=text]:focus{border-color:var(--accent)}
+  #editor input[type=range]{flex:1;min-width:0;accent-color:var(--accent);height:22px}
+  #editor .tip{font-size:10px;line-height:1.5;color:#65717f;text-align:center}
+
+  #gate{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;
+    background:radial-gradient(120% 80% at 50% 40%,#141a22,#0b0d10)}
+  #gate .big{font-size:18px;font-weight:600}
+  #gate .sub{font-size:12px;color:var(--dim);line-height:1.8;max-width:330px}
+  #gate .pick{border-color:var(--accent);color:var(--accent);padding:11px 22px;font-size:13px;margin-top:6px}
+  #gate.hide{display:none}
+  #err{color:#ff8b8b;font-size:12px;min-height:18px}
+  /* visibility 而非 display：panel 内两卡片叠放时都撑高度，切换不跳画布区。
+     .top / #hud 是 fixed 浮层，视觉隐藏即可。gate 仍用 .hide 的 display:none。 */
+  .gone{visibility:hidden !important;pointer-events:none !important}
+  #confirmBar{padding:12px 10px calc(env(safe-area-inset-bottom) + 12px);
+    background:var(--solid);border:1px solid var(--line);border-radius:10px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;
+    touch-action:manipulation}
+  #confirmBar .size{font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    color:var(--accent);letter-spacing:.5px}
+  #confirmBar .size small{color:var(--dim);font-size:10px;letter-spacing:0}
+  #confirmBar .row{display:flex;gap:10px;width:100%;max-width:420px}
+  #confirmBar button{flex:1;font-size:12px;padding:9px 8px}
+  #confirmBar #btnSave{border-color:var(--accent);color:var(--accent)}
+  #confirmBar button:disabled{opacity:.38;cursor:default}
+  #confirmBar .tip{font-size:10px;color:#65717f;text-align:center;line-height:1.5}
+  #hud .dbg{display:none}
+  body.debug #hud .dbg{display:block}
+  body.debug #hud .k{width:52px;margin-right:0}   /* debug 展开时标签仍对齐 */
+  @media (min-aspect-ratio:13/10){
+    #stage{grid-template-columns:1fr var(--card-w);grid-template-rows:1fr}
+    #view{grid-column:1;grid-row:1}
+    #panel{grid-column:2;grid-row:1;width:100%;height:100%;overflow:auto}
+    .top{right:var(--card-w)}          /* 标题栏按钮不压到右栏 */
+    #editor .hint{display:none}
+  }
+  input[type=file]{display:none}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="btns">
+    <button id="btnPick">重新选图</button>
+    <button id="btnReset">重置视图</button>
+  </div>
+</div>
+
+<div id="hud">
+  <div class="dbg"><span class="k">state</span><b id="hState">—</b></div>
+  <div class="dbg"><span class="k">focus</span><b id="hFocus">—</b></div>
+  <div class="dbg"><span class="k">mode</span><b id="hMode">—</b></div>
+  <div class="dbg"><span class="k">A</span><b id="hA">—</b></div>
+  <div class="dbg"><span class="k">B</span><b id="hB">—</b></div>
+  <div><span class="k">选区宽</span><b id="hDx">—</b></div>
+  <div><span class="k">选区高</span><b id="hDy">—</b></div>
+  <div class="dbg"><span class="k">P</span><b id="hP">—</b></div>
+  <div class="dbg"><span class="k">s</span><b id="hS">—</b></div>
+  <div class="dbg"><span class="k">W×H</span><b id="hWH">—</b></div>
+  <div class="dbg"><span class="k">s_fit</span><b id="hFit">—</b></div>
+  <div class="dbg"><span class="k">offset</span><b id="hOff">—</b></div>
+  <div class="dbg"><span class="k">dpr</span><b id="hDpr">—</b></div>
+  <div class="dbg"><span class="k">EXIF</span><b id="hExif">—</b></div>
+  <div class="dbg"><span class="k">tap 原图</span><b id="hTap">—</b></div>
+</div>
+
+<div id="stage">
+  <canvas id="view"></canvas>
+  <div id="panel">
+    <div id="editor" class="off">
+  <div class="row">
+    <button id="btnFocus">焦点 A</button>
+    <button id="btnMode">粗调</button>
+    <span class="hint">轻点落角</span>
+  </div>
+  <div class="row coord">
+    <label>X</label><input id="inX" type="text" inputmode="numeric" value="0">
+    <input id="rgX" type="range" min="0" max="100" step="1" value="0">
+  </div>
+  <div class="row coord">
+    <label>Y</label><input id="inY" type="text" inputmode="numeric" value="0">
+    <input id="rgY" type="range" min="0" max="100" step="1" value="0">
+  </div>
+  <div class="row acts">
+    <button id="btnUndo">撤销一角</button>
+    <button id="btnRA">重选 A</button>
+    <button id="btnRB">重选 B</button>
+    <button id="btnClear">清空</button>
+  </div>
+  <div class="row"><button id="btnConfirm" style="flex:1">确认选区</button></div>
+  <div class="tip">方向键 1px · Shift+方向键 10px · Tab 切焦点角 · 数值框回车应用</div>
+</div>
+
+<div id="confirmBar" class="gone">
+  <div class="size"><span id="cSize">—</span> <small>原图像素</small></div>
+  <div class="row">
+    <button id="btnBack">返回编辑</button>
+    <button id="btnSave">保存图片</button>
+  </div>
+    <div class="tip">可双指缩放 / 平移查看</div>
+  </div>
+  </div>
+</div>
+
+<div id="gate">
+  <div class="big">图片裁剪器</div>
+  <div class="sub">选择或拖入一张本地图片</div>
+  <button class="pick" id="btnGate">选择图片</button>
+  <div id="err"></div>
+</div>
+
+<input type="file" id="file" accept="image/*">
+
+<script>
+(() => {
+  'use strict';
+
+  // ─────────────────────────────────────────────────────────────
+  // 坐标约定（全项目地基，后续各步沿用）
+  //   baked 位图：EXIF 已一次性烤正，W/H 取烤正后尺寸
+  //   原图坐标： [0,W] × [0,H] 的整数格线（连续平面，非像素索引）
+  //   屏幕坐标： screen = orig * s + offset
+  //   s        = P/100 × s_fit ，s_fit = min(画布W/W, 画布H/H)
+  //   P=100    = 在画布区内 contain 恰好完整显示（不是 1:1；画布区 = 视口扣卡片）
+  //   5b      ：cssW/cssH 取自 canvas.clientWidth/Height，天然就是画布区尺寸；
+  //             卡片占位不参与绘制，screen↔orig 换算与原点 (0,0) 全部不变
+  //   视图只改 P / offset，永不改写任何角点
+  //   选区    ：A / B 为整数格线，dx = |Bx−Ax|、dy = |By−Ay|，非负
+  //   微调    ：三通道写同一个整数坐标源；步长恒 1 原图像素，不随倍率浮动
+  //   导出    ：(minX,minY,dx,dy) 从 baked 1:1 搬像素，与 s / P / offset 无关
+  //   5a     ：HUD 默认 dx/dy 两行，?debug=1 展开全量且 S3 可见；
+  //            非 JPEG 交浏览器解码、不读 EXIF；bake / 导出保留 alpha
+  // ─────────────────────────────────────────────────────────────
+
+  // 步 5a：默认只显示 dx/dy；?debug=1 展开全量读数，且 S3 也不收起。
+  // debug 是验证开关（转屏要验「四个数不动」），不是产品 UI。
+  const DEBUG = new URLSearchParams(location.search).get('debug') === '1';
+  if (DEBUG) document.body.classList.add('debug');
+
+  const canvas = document.getElementById('view');
+  const ctx = canvas.getContext('2d', { alpha:false });
+  const $ = id => document.getElementById(id);
+  const fileInput = $('file'), gate = $('gate'), errBox = $('err');
+
+  let baked = null;              // 烤正后的位图（HTMLCanvasElement）
+  let W = 0, H = 0;             // 烤正后尺寸
+  let cssW = 0, cssH = 0, dpr = 1;
+  let sFit = 1, s = 1, P = 100;
+  const offset = { x:0, y:0 };
+  let exifNote = '—';
+  let tapNote = '—';
+  let dirty = true;
+
+  // 步 3：角点只存原图整数格线坐标，视图永远不改写它们
+  let A = null, B = null;        // {x,y} ∈ [0,W]×[0,H]
+  let focus = 'A';               // 当前微调焦点角
+  let reselect = null;           // 'A' | 'B'：等待重落该角
+  let reselectBackup = null;     // 重选时被清掉的旧角，供撤销恢复
+  let fine = false;              // 滑块档位：false 粗调(全量程) / true 细调(±32)
+  let confirmed = false;         // S3：只收 UI，合成逻辑与 S2 完全相同
+  const FINE_SPAN = 32;
+  const curState = () => (A && B) ? (confirmed ? 'S3' : 'S2') : ((A || B) ? 'S1' : 'S0');
+  const activeKey = () => (focus === 'A' && A) ? 'A'
+                        : (focus === 'B' && B) ? 'B'
+                        : (A ? 'A' : (B ? 'B' : null));
+
+  // ── JPEG EXIF orientation + SOF 原始尺寸 ──────────────────────
+  function readJpegMeta(buf){
+    const v = new DataView(buf);
+    let orientation = 1, rawW = 0, rawH = 0;
+    let orientOff = 0, tiffLE = false;      // tag 0x0112 的 value 字段位置，供中和用
+    if (v.byteLength < 4 || v.getUint8(0) !== 0xFF || v.getUint8(1) !== 0xD8)
+      return { orientation, rawW, rawH, orientOff, tiffLE, isJpeg:false };
+
+    let off = 2;
+    while (off + 4 <= v.byteLength){
+      if (v.getUint8(off) !== 0xFF){ off++; continue; }
+      const m = v.getUint8(off + 1);
+      if (m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7)){ off += 2; continue; }
+      const len = v.getUint16(off + 2, false);
+      if (len < 2 || off + 2 + len > v.byteLength) break;
+
+      // SOF0/1/2/3/5/6/7/9/10/11/13/14/15 → 未旋转的原始宽高
+      const isSOF = (m >= 0xC0 && m <= 0xC3) || (m >= 0xC5 && m <= 0xC7)
+                 || (m >= 0xC9 && m <= 0xCB) || (m >= 0xCD && m <= 0xCF);
+      if (isSOF && len >= 7){
+        rawH = v.getUint16(off + 5, false);
+        rawW = v.getUint16(off + 7, false);
+      }
+
+      // APP1 / Exif / IFD0 / tag 0x0112
+      if (m === 0xE1 && len >= 8){
+        const p = off + 4;
+        if (v.getUint32(p, false) === 0x45786966){ // 'Exif'
+          const tiff = p + 6;
+          if (tiff + 8 <= v.byteLength){
+            const le = v.getUint16(tiff, false) === 0x4949; // 'II'
+            tiffLE = le;
+            const u16 = o => v.getUint16(o, le);
+            const u32 = o => v.getUint32(o, le);
+            const ifd0 = tiff + u32(tiff + 4);
+            if (ifd0 + 2 <= v.byteLength){
+              const n = Math.min(u16(ifd0), 512);
+              for (let i = 0; i < n; i++){
+                const e = ifd0 + 2 + i * 12;
+                if (e + 10 > v.byteLength) break;
+                if (u16(e) === 0x0112){
+                  orientation = u16(e + 8) || 1;
+                  orientOff = e + 8;          // SHORT 值就写在 value 字段头两字节
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+      if (m === 0xDA) break; // SOS，后面没有元数据了
+      off += 2 + len;
+    }
+    return { orientation, rawW, rawH, orientOff, tiffLE, isJpeg:true };
+  }
+
+  // 把 EXIF orientation 就地改成 1 再交给解码器。
+  // 这样任何浏览器都不会替我们转正，烤正完全由 bakeMatrix 做一次，结果确定。
+  function neutralizeOrientation(buf){
+    const meta = readJpegMeta(buf);
+    const out = buf.slice(0);                 // 复制，不改用户原文件
+    if (meta.orientOff > 0){
+      new DataView(out).setUint16(meta.orientOff, 1, meta.tiffLE);
+    }
+    return { buf: out, meta };              // meta.orientation 仍是原始值(如 6)
+  }
+
+  // orientation 1..8 的整数仿射矩阵（不用 rotate(π/2)，避免浮点误差）
+  // setTransform(a,b,c,d,e,f): x' = a·x + c·y + e , y' = b·x + d·y + f
+  function bakeMatrix(o, w, h){
+    switch(o){
+      case 2: return [-1, 0, 0, 1, w, 0];
+      case 3: return [-1, 0, 0,-1, w, h];
+      case 4: return [ 1, 0, 0,-1, 0, h];
+      case 5: return [ 0, 1, 1, 0, 0, 0];
+      case 6: return [ 0, 1,-1, 0, h, 0];
+      case 7: return [ 0,-1,-1, 0, h, w];
+      case 8: return [ 0,-1, 1, 0, 0, w];
+      default:return [ 1, 0, 0, 1, 0, 0];
+    }
+  }
+
+  function loadViaImg(file){
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片解码失败')); };
+      img.src = url;
+    });
+  }
+
+  async function bake(file){
+    const raw = await file.arrayBuffer();
+    const probe = readJpegMeta(raw);
+    const isJpeg = probe.isJpeg;
+
+    let src, meta;
+    if (isJpeg){
+      // 副本上把 orientation 改成 1，杜绝浏览器「接受了 none 却仍按 from-image 转正」
+      // 的歧义；烤正完全由 bakeMatrix 做一次，结果确定。
+      const n = neutralizeOrientation(raw);
+      meta = n.meta;
+      const blob = new Blob([n.buf], { type: file.type || 'image/jpeg' });
+      if (typeof createImageBitmap === 'function'){
+        try { src = await createImageBitmap(blob, { imageOrientation:'none' }); }
+        catch (_) { src = await createImageBitmap(blob); }
+      } else {
+        src = await loadViaImg(blob);
+      }
+    } else {
+      // 非 JPEG：不读元数据、不中和、不指定 imageOrientation，整张交给浏览器默认解码。
+      // 坐标系直接建在解码位图上（含浏览器自行做的 EXIF 转正，若有），不二次干预。
+      // PNG eXIf / WebP / AVIF / HEIC 各家转正行为不一致，读元数据反而会踩步 1 的坑。
+      meta = null;
+      if (typeof createImageBitmap === 'function') src = await createImageBitmap(file);
+      else src = await loadViaImg(file);
+    }
+
+    const srcW = src.naturalWidth || src.width;
+    const srcH = src.naturalHeight || src.height;
+    const o = meta ? meta.orientation : 1;         // 中和前读到的真实 EXIF 值
+    const swap = o >= 5 && o <= 8;
+    // 只有 JPEG 且拿到「未旋转的原始位图」才由我们烤一次；
+    // 若某解码器仍擅自转正，就不二次旋转。
+    const rawW = (meta && meta.rawW) || srcW, rawH = (meta && meta.rawH) || srcH;
+    const decodedIsRaw = (srcW === rawW && srcH === rawH);
+    const needBake = isJpeg && o >= 2 && o <= 8 && decodedIsRaw;
+
+    // alpha:true —— alpha 与 RGB 一样随 drawImage 搬移，旋转 / flip 也跟着走，
+    // 不预乘、不把透明压成黑。主视图 canvas 仍 alpha:false（负责最终呈现、底色黑）。
+    const cv = document.createElement('canvas');
+    cv.width  = needBake ? (swap ? srcH : srcW) : srcW;
+    cv.height = needBake ? (swap ? srcW : srcH) : srcH;
+    const cx = cv.getContext('2d', { alpha:true });
+    cx.imageSmoothingEnabled = false;
+    if (needBake) cx.setTransform(...bakeMatrix(o, srcW, srcH));
+    cx.drawImage(src, 0, 0);
+    if (src.close) src.close();
+
+    exifNote = !isJpeg ? '非 JPEG · 浏览器解码'
+             : o === 1 ? 'o=1 无需旋转'
+             : needBake ? `o=${o} 手动烤正`
+             : `o=${o} 浏览器转正（未二次旋转）`;
+    return cv;
+  }
+
+  // ── 视口 / 倍率 ───────────────────────────────────────────────
+  function measure(){
+    const oldS = s, oldW = cssW, oldH = cssH;
+    // 视口变化前，记住视口中心对应的原图点，改完再还原（角点不动的预备逻辑）
+    let centerOrig = null;
+    if (baked && oldW > 0 && oldS > 0)
+      centerOrig = { x:(oldW/2 - offset.x)/oldS, y:(oldH/2 - offset.y)/oldS };
+
+    // 画布区尺寸：canvas 是 stage 的 grid item，宽度/高度已被卡片扣掉，
+    // 左上角仍是 (0,0)，所以 offset 无需任何补偿。
+    cssW = canvas.clientWidth; cssH = canvas.clientHeight;
+    dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.max(1, Math.round(cssW * dpr));
+    canvas.height = Math.max(1, Math.round(cssH * dpr));
+    ctx.imageSmoothingEnabled = false;
+
+    if (baked){
+      sFit = Math.min(cssW / W, cssH / H);
+      s = P / 100 * sFit;
+      if (centerOrig){
+        offset.x = cssW/2 - centerOrig.x * s;
+        offset.y = cssH/2 - centerOrig.y * s;
+      }
+    }
+    dirty = true;
+  }
+
+  function fitView(){
+    if (!baked) return;
+    P = 100;
+    sFit = Math.min(cssW / W, cssH / H);
+    s = P / 100 * sFit;
+    offset.x = (cssW - W * s) / 2;
+    offset.y = (cssH - H * s) / 2;
+    dirty = true;
+  }
+
+  // ── 绘制：整图按 s 直接画，不分块、不重采样 ───────────────────
+  function draw(){
+    const kx = canvas.width / cssW, ky = canvas.height / cssH;
+    ctx.setTransform(kx, 0, 0, ky, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+
+    // 视口底色：图外无像素可叠，以黑呈现
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, cssW, cssH);
+
+    if (baked){
+      ctx.drawImage(baked, offset.x, offset.y, W * s, H * s);
+    }
+
+    if (A && B){
+      // 选区屏幕矩形：min/max 归一化，先点哪个角都一样
+      const x1 = Math.min(A.x, B.x) * s + offset.x;
+      const y1 = Math.min(A.y, B.y) * s + offset.y;
+      const x2 = Math.max(A.x, B.x) * s + offset.x;
+      const y2 = Math.max(A.y, B.y) * s + offset.y;
+
+      // 单次 evenodd 反向路径：外框(视口) + 内洞(选区)，一次 fill 出整片暗区。
+      // 不再是四块拼接 → 不存在块与块各自合成造成的水平 / 垂直亮接缝。
+      // 洞跑出视口时外框自动全暗；部分在外时相交部分自然挖空，无需求交 clamp。
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.beginPath();
+      ctx.rect(0, 0, cssW, cssH);                  // 外框
+
+      // 内洞四边对齐设备像素格线，消除 path 填充的 1px 抗锯齿软边 → 硬边。
+      // kx / ky 是 canvas 位图与 CSS 视口的实际比(≈dpr)，比直接用 dpr 更精确。
+      // 仅显示层容差：不写回 A/B、不改 dx/dy、不影响导出。
+      const snap = (v, k) => Math.round(v * k) / k;
+      const rx1 = snap(x1, kx), ry1 = snap(y1, ky);
+      const rx2 = snap(x2, kx), ry2 = snap(y2, ky);
+      if (rx2 > rx1 && ry2 > ry1) ctx.rect(rx1, ry1, rx2 - rx1, ry2 - ry1);  // 内洞
+
+      ctx.fill('evenodd');
+      // 不描边、不加控制点；明暗分界本身就是全部视觉表达
+    }
+
+    // 微调态：给「当前可编辑角」一个带黑描边的准星（S1 唯一角 / S2 焦点角）。
+    // 先 3px 灰大十字打底，再 1px 白小十字压上去 → 任何底色上都看得清。
+    // 这不是选区边框；S3 确认态连准星一起收起，只剩明暗分界。
+    const fk = activeKey();
+    if (fk && !confirmed){
+      const c = fk === 'A' ? A : B;
+      const sx = c.x * s + offset.x, sy = c.y * s + offset.y;
+      ctx.lineCap = 'butt';
+      // ① 灰底：3px 宽、±9 长
+      ctx.strokeStyle = curState() === 'S2' ? 'rgba(127,127,127,.35)' : 'rgba(127,127,127,.55)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(sx - 9, sy); ctx.lineTo(sx + 9, sy);
+      ctx.moveTo(sx, sy - 9); ctx.lineTo(sx, sy + 9);
+      ctx.stroke();
+      // ② 白芯：1px 宽、±8 长
+      ctx.strokeStyle = curState() === 'S2' ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.55)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(sx - 8, sy); ctx.lineTo(sx + 8, sy);
+      ctx.moveTo(sx, sy - 8); ctx.lineTo(sx, sy + 8);
+      ctx.stroke();
+    }
+    updateHud();
+  }
+
+  function fmt(n, p = 2){ return Number(n).toFixed(p); }
+  function updateHud(){
+    $('hP').textContent   = fmt(P, 2) + '%';
+    $('hS').textContent   = fmt(s, 6);
+    $('hWH').textContent  = baked ? `${W} × ${H}` : '—';
+    $('hFit').textContent = fmt(sFit, 6);
+    $('hOff').textContent = `${fmt(offset.x, 1)}, ${fmt(offset.y, 1)}`;
+    $('hDpr').textContent = fmt(dpr, 2);
+    $('hExif').textContent= exifNote;
+    $('hTap').textContent = tapNote;
+    const hasSel = !!(A && B);
+    const fk = activeKey();
+    $('hState').textContent = curState() + (reselect ? ` ↺${reselect}` : '');
+    $('hFocus').textContent = fk || '—';
+    $('hMode').textContent = fine ? `细调 ±${FINE_SPAN}` : '粗调 全量程';
+    $('hA').textContent = A ? `${A.x}, ${A.y}` : '—';
+    $('hB').textContent = B ? `${B.x}, ${B.y}` : '—';
+    $('hDx').textContent = hasSel ? `${Math.abs(B.x - A.x)}px` : '—';
+    $('hDy').textContent = hasSel ? `${Math.abs(B.y - A.y)}px` : '—';
+  }
+
+  function loop(){ if (dirty){ draw(); dirty = false; } requestAnimationFrame(loop); }
+
+  // ── 输入分流 ───────────────────────────────────────────────────
+  // 单指：越 6px 判平移；未越阈值且 <300ms 快抬判轻点 → 落角 / 重落角
+  // 双指：间距比 = 缩放（锚点两指中点），中点位移 = 平移，连续手势不切模式
+  // 双指序列内所有抬起都不落角，直到全部手指离开
+  const pts = new Map();
+  let seqStart = 0, start = {x:0,y:0}, last = {x:0,y:0};
+  let dragging = false, wasPinch = false;
+  let prevMid = null, prevDist = 0;
+
+  const pos = e => ({ x:e.clientX, y:e.clientY });
+  const midOf = (a,b) => ({ x:(a.x+b.x)/2, y:(a.y+b.y)/2 });
+  const distOf = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+
+  function beginTwo(){
+    const [a,b] = [...pts.values()];
+    prevMid = midOf(a,b);
+    prevDist = distOf(a,b);
+    wasPinch = true;
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    const p = pos(e);
+    if (pts.size === 0){
+      seqStart = performance.now();
+      start = {...p}; last = {...p};
+      dragging = false; wasPinch = false;
+    }
+    pts.set(e.pointerId, p);
+    if (pts.size >= 2) beginTwo();
+    dirty = true;
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    e.preventDefault();
+    const p = pos(e);
+    pts.set(e.pointerId, p);
+
+    if (pts.size >= 2){
+      const [a,b] = [...pts.values()];
+      const mid = midOf(a,b), dist = distOf(a,b);
+      if (prevMid){
+        const k = dist / Math.max(prevDist, 1e-6);
+        const newP = P * k;
+        // 不设上限；仅排除浮点下溢，不做任何 UI 拦截
+        if (isFinite(newP) && newP > 1e-9){
+          // 以「当前两指中点」为锚缩放：该点下的原图内容保持不动
+          offset.x = mid.x - (mid.x - offset.x) * k;
+          offset.y = mid.y - (mid.y - offset.y) * k;
+          P = newP;
+          // 两指同向位移 → 平移
+          offset.x += mid.x - prevMid.x;
+          offset.y += mid.y - prevMid.y;
+          s = P / 100 * sFit;
+        }
+      }
+      prevMid = mid; prevDist = dist;
+      dirty = true;
+      return;
+    }
+
+    // 单指
+    const moved = Math.hypot(p.x - start.x, p.y - start.y);
+    if (!dragging && moved >= 6) dragging = true;
+    if (dragging){
+      offset.x += p.x - last.x;
+      offset.y += p.y - last.y;
+      dirty = true;
+    }
+    last = {...p};
+  });
+
+  function endPointer(e, cancelled){
+    if (!pts.has(e.pointerId)) return;
+    const wasSingle = pts.size === 1;
+    const p = pts.get(e.pointerId);
+    const dt = performance.now() - seqStart;
+    const d = Math.hypot(e.clientX - p.x, e.clientY - p.y);
+
+    if (!cancelled && !confirmed && baked && wasSingle && !wasPinch && !dragging && dt < 300 && d < 6){
+      // 屏幕 → 原图：只用 s，绝不用 P/100
+      const ox = (e.clientX - offset.x) / s;
+      const oy = (e.clientY - offset.y) / s;
+      // 先夹取到图片范围，再吸附到整数格线（坐标域本身就是整数，无开关）
+      const cx = Math.round(Math.min(W, Math.max(0, ox)));
+      const cy = Math.round(Math.min(H, Math.max(0, oy)));
+      tapNote = `${fmt(ox,2)}, ${fmt(oy,2)} → (${cx}, ${cy})`;
+
+      // 状态机由 A/B 推导：重落 > 补 A > 补 B > S2 一律忽略（不冒第三个点）
+      const p = {x:cx, y:cy};
+      if (reselect){
+        if (reselect === 'A') A = p; else B = p;
+        focus = reselect; reselect = null; reselectBackup = null;
+        syncEditor(true);
+      } else if (!A){ A = p; focus = 'A'; syncEditor(true); }
+      else if (!B){ B = p; focus = 'B'; syncEditor(true); }
+      // else：完整 S2，只刷新 tap 原图读数
+      dirty = true;
+    }
+
+    pts.delete(e.pointerId);
+    if (pts.size === 1){
+      // 抬一指后：剩余指按新起点重新起算，不继承双指期间的中心位移
+      const q = [...pts.values()][0];
+      last = {...q}; start = {...q};
+      dragging = true;              // 接着拖即可平移，且本序列不会误落角
+      prevMid = null; prevDist = 0;
+    } else if (pts.size === 0){
+      wasPinch = false; dragging = false;
+      prevMid = null; prevDist = 0;
+    } else {
+      beginTwo();
+    }
+  }
+  canvas.addEventListener('pointerup',     e => endPointer(e, false));
+  canvas.addEventListener('pointercancel', e => endPointer(e, true));
+
+  // 桌面顺手附赠：滚轮缩放（步 5 再补空格/中键拖的完整等价）
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (!baked) return;
+    const k = Math.exp(-e.deltaY * 0.0015);
+    const newP = P * k;
+    if (!(isFinite(newP) && newP > 1e-9)) return;
+    const mx = e.clientX, my = e.clientY;
+    offset.x = mx - (mx - offset.x) * k;
+    offset.y = my - (my - offset.y) * k;
+    P = newP;
+    s = P / 100 * sFit;
+    dirty = true;
+  }, { passive:false });
+
+  // ── 步 3：精度与状态机 ─────────────────────────────────────────
+  const editor = $('editor');
+  const inX = $('inX'), inY = $('inY'), rgX = $('rgX'), rgY = $('rgY');
+  const btnFocus = $('btnFocus'), btnMode = $('btnMode');
+  const btnUndo = $('btnUndo'), btnRA = $('btnRA'), btnRB = $('btnRB'), btnClear = $('btnClear');
+  const btnConfirm = $('btnConfirm');
+
+  // 所有入口统一走这里：夹取 → 规整为整数格线 → 写同一个坐标源。
+  // 坐标域本身就是整数，吸附不是功能、不设开关。
+  function clampInt(v, max){ return Math.round(Math.min(max, Math.max(0, v))); }
+  function setActiveCoord(nx, ny){
+    const k = activeKey(); if (!k) return;
+    const c = k === 'A' ? A : B;
+    c.x = nx === undefined ? c.x : clampInt(nx, W);
+    c.y = ny === undefined ? c.y : clampInt(ny, H);
+    dirty = true;
+  }
+
+  // 滑块档位：粗调 = 0..W/H 全量程；细调 = 切档/切角当时的值 ±32。
+  // reset=true 时重算窗口并缓存；reset=false 沿用缓存，保证连续拖动不跳。
+  function setRange(rg, axis, cur, reset){
+    const allMax = Math.max(1, axis === 'x' ? W : H);
+    if (reset){
+      let lo = 0, hi = allMax;
+      if (fine){
+        lo = Math.max(0, cur - FINE_SPAN);
+        hi = Math.min(allMax, cur + FINE_SPAN);
+        if (hi <= lo){ lo = 0; hi = allMax; }
+      }
+      rg.dataset.lo = lo; rg.dataset.hi = hi;
+    }
+    rg.min = Number(rg.dataset.lo ?? 0);
+    rg.max = Number(rg.dataset.hi ?? allMax);
+    rg.step = 1;
+    rg.value = Math.min(Number(rg.max), Math.max(Number(rg.min), cur));
+  }
+
+  function syncEditor(resetRange){
+    const k = activeKey();
+    const editable = !!(A || B || reselect);
+    editor.classList.toggle('off', !editable);
+
+    btnFocus.textContent = '焦点 ' + (k || '无');
+    btnFocus.disabled = !(A && B);
+    btnMode.textContent = fine ? '细调' : '粗调';
+    btnMode.disabled = !k;
+    btnUndo.disabled = !editable;
+    btnRA.disabled = !A;
+    btnRB.disabled = !B;
+    btnClear.disabled = !editable;
+    btnConfirm.disabled = !cropRect();      // 零宽 / 零高不能确认，也不能保存
+
+    [inX, inY, rgX, rgY].forEach(el => el.disabled = !k);
+    if (!k){ inX.value = ''; inY.value = ''; return; }
+
+    const c = k === 'A' ? A : B;
+    // 数值框回显规整后的整数；输 1.5 就显示 2，不假装是小数
+    inX.value = String(c.x);
+    inY.value = String(c.y);
+    setRange(rgX, 'x', c.x, resetRange);
+    setRange(rgY, 'y', c.y, resetRange);
+  }
+
+  function commitIn(which){
+    const k = activeKey(); if (!k) return;
+    const raw = parseFloat(which === 'x' ? inX.value : inY.value);
+    if (!isFinite(raw)){ syncEditor(false); return; }
+    const v = clampInt(raw, which === 'x' ? W : H);
+    setActiveCoord(which === 'x' ? v : undefined, which === 'y' ? v : undefined);
+    syncEditor(true);              // 回显规整值 + 按新值重设细调窗口
+    dirty = true;
+  }
+
+  function toggleFocus(){
+    if (!(A && B)) return;
+    focus = focus === 'A' ? 'B' : 'A';
+    syncEditor(true); dirty = true;
+  }
+
+  function undo(){
+    if (reselect){
+      if (reselectBackup){ if (reselect === 'A') A = reselectBackup; else B = reselectBackup; }
+      reselect = null; reselectBackup = null;
+    } else if (B){ B = null; focus = 'A'; }
+    else if (A){ A = null; focus = 'A'; }
+    syncEditor(true); dirty = true;
+  }
+
+  function reselectCorner(k){
+    if (k === 'A' && A){ reselectBackup = A; A = null; }
+    else if (k === 'B' && B){ reselectBackup = B; B = null; }
+    else return;
+    reselect = k; focus = k;
+    syncEditor(true); dirty = true;
+  }
+
+  function clearAll(){
+    A = null; B = null; focus = 'A';
+    reselect = null; reselectBackup = null;
+    tapNote = '—';                 // 只清角点，视图(倍率/平移)原样保留
+    syncEditor(true); dirty = true;
+  }
+
+  btnFocus.addEventListener('click', toggleFocus);
+  btnMode.addEventListener('click', () => { fine = !fine; syncEditor(true); dirty = true; });
+  btnUndo.addEventListener('click', undo);
+  btnRA.addEventListener('click', () => reselectCorner('A'));
+  btnRB.addEventListener('click', () => reselectCorner('B'));
+  btnClear.addEventListener('click', clearAll);
+
+  inX.addEventListener('change', () => commitIn('x'));
+  inY.addEventListener('change', () => commitIn('y'));
+
+  // 滑块拖动：沿用固定窗口，不重设，保证连续手感
+  rgX.addEventListener('input', () => { setActiveCoord(Number(rgX.value), undefined); syncEditor(false); });
+  rgY.addEventListener('input', () => { setActiveCoord(undefined, Number(rgY.value)); syncEditor(false); });
+
+  window.addEventListener('keydown', e => {
+    if (!baked) return;
+    if (confirmed){                       // S3 只读：不微调、不切焦点
+      if (e.key === 'Escape'){ e.preventDefault(); leaveConfirm(); }
+      return;
+    }
+    if (e.key === 'Tab'){ e.preventDefault(); toggleFocus(); return; }
+    if (e.key === 'Enter' && (e.target === inX || e.target === inY)){
+      e.preventDefault();
+      commitIn(e.target === inX ? 'x' : 'y');
+      e.target.blur();
+      return;
+    }
+    const dir = { ArrowLeft:[-1,0], ArrowRight:[1,0], ArrowUp:[0,-1], ArrowDown:[0,1] }[e.key];
+    if (!dir || !activeKey()) return;
+    e.preventDefault();
+    const step = e.shiftKey ? 10 : 1;    // 恒为原图像素，不随 s 浮动
+    const c = activeKey() === 'A' ? A : B;
+    setActiveCoord(c.x + dir[0] * step, c.y + dir[1] * step);
+    syncEditor(true);                   // 微调用键盘时让滑块指示跟上
+  });
+
+  // ── 步 4：确认态与原分辨率导出 ───────────────────────────────
+  const confirmBar = $('confirmBar');
+  const cSize = $('cSize');
+  const btnBack = $('btnBack'), btnSave = $('btnSave');
+  let saveTimer = 0;
+
+  function cropRect(){
+    if (!A || !B) return null;
+    const dx = Math.abs(B.x - A.x), dy = Math.abs(B.y - A.y);
+    if (dx <= 0 || dy <= 0) return null;        // 零宽 / 零高不可出图
+    return { minX:Math.min(A.x, B.x), minY:Math.min(A.y, B.y), dx, dy };
+  }
+
+  // S3 只收 UI：标题栏 / HUD 调试读数 / 编辑条 / 焦点准星全部收起，
+  // 只剩亮区 + 暗区 + 一行 dx×dy 只读。遮罩绘制与 S2 完全一致，不做二次渲染。
+  // 手势仍在：双指缩放 / 平移只动视图，角点永远不动。
+  function syncUI(){
+    const c = confirmed;
+    document.querySelector('.top').classList.toggle('gone', c);
+    $('hud').classList.toggle('gone', c && !DEBUG);   // debug 下 S3 保留读数，供转屏验四数不动
+    editor.classList.toggle('gone', c);
+    confirmBar.classList.toggle('gone', !c);
+    if (c){
+      const r = cropRect();
+      cSize.textContent = r ? `${r.dx} × ${r.dy}` : '0 × 0';
+      btnSave.disabled = !r;
+    }
+    dirty = true;
+  }
+
+  function enterConfirm(){
+    if (!cropRect()) return;
+    confirmed = true;
+    syncUI();
+  }
+  function leaveConfirm(){
+    confirmed = false;
+    syncUI();
+    syncEditor(true);
+  }
+
+  function saveCrop(){
+    const r = cropRect();
+    if (!r || !baked) return;
+    // 导出只认烤正后位图的原分辨率，与当前 s / P / offset 完全无关。
+    // 源矩形与目标矩形同尺寸 → 1:1 像素搬移，不缩放、不插值、不重采样。
+    const out = document.createElement('canvas');
+    out.width = r.dx; out.height = r.dy;
+    const octx = out.getContext('2d', { alpha:true });
+    octx.imageSmoothingEnabled = false;
+    octx.drawImage(baked, r.minX, r.minY, r.dx, r.dy, 0, 0, r.dx, r.dy);
+    out.toBlob(blob => {
+      if (!blob){ btnSave.textContent = '导出失败'; return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '裁剪结果.png';             // 只产出一个图片文件，不写坐标 / JSON
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      btnSave.textContent = `已保存 ${r.dx}×${r.dy}`;
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => { btnSave.textContent = '保存图片'; }, 2200);
+    }, 'image/png');
+  }
+
+  btnConfirm.addEventListener('click', enterConfirm);
+  btnBack.addEventListener('click', leaveConfirm);
+  btnSave.addEventListener('click', saveCrop);
+
+  // ── 载入（仅本地文件 / 拖入） ──────────────────────────────────
+  async function openFile(file){
+    if (!file) return;
+    if (!file.type.startsWith('image/')){ errBox.textContent = '请选择图片文件'; return; }
+    errBox.textContent = '解码中…';
+    try {
+      baked = await bake(file);
+      W = baked.width; H = baked.height;
+      A = null; B = null; focus = 'A';
+      reselect = null; reselectBackup = null;
+      confirmed = false; tapNote = '—';
+      btnSave.textContent = '保存图片';
+      syncEditor(true); syncUI();                // 重新选图 = 重来
+      gate.classList.add('hide');
+      fitView();
+      errBox.textContent = '';
+    } catch (err){
+      errBox.textContent = '载入失败：' + (err && err.message ? err.message : '未知错误');
+    }
+  }
+
+  $('btnPick').addEventListener('click', () => fileInput.click());
+  $('btnGate').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => { openFile(e.target.files[0]); fileInput.value = ''; });
+  $('btnReset').addEventListener('click', () => { fitView(); tapNote = '—'; });
+
+  ['dragenter','dragover'].forEach(t =>
+    document.addEventListener(t, e => { e.preventDefault(); gate.classList.remove('hide'); }));
+  document.addEventListener('drop', e => {
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files[0]) openFile(e.dataTransfer.files[0]);
+  });
+
+  window.addEventListener('resize', measure);
+  window.addEventListener('orientationchange', () => setTimeout(measure, 120));
+  // ── 诊断 A：已移除 ResizeObserver 监听器（含回调与 lastCW/lastCH 记账）──
+  // 这是本快照唯一改动。measure 仍同步执行、绘制仍在 rAF loop，
+  // 与 5a 的触发路径完全一致，用于隔离「RO 双路径」这一个变量。
+
+  syncEditor(true);
+  syncUI();
+  measure();
+  loop();
+})();
+</script>
+</body>
+</html>
